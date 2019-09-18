@@ -7,7 +7,11 @@ import (
   "flag"
   "NN"
   "math/rand"
+  "sync"
 )
+
+var wg sync.WaitGroup
+
 
 func main() {
   // 784 inputs - 28 x 28 pixels, each pixel is an input
@@ -67,8 +71,8 @@ func predict(net *NN.NeuralNetwork) {
     if best == label {
       score++
     } else {
-      fmt.Println("Predict", best, " Expected", label, "OUT", outputs)
-      mnist.PrintImage(image)
+      //fmt.Println("Predict", best, " Expected", label, "OUT", outputs)
+      //mnist.PrintImage(image)
     }
   }
 
@@ -88,12 +92,15 @@ func train(net *NN.NeuralNetwork) {
   }
   rand.Seed(time.Now().UTC().UnixNano())
 
-  for epochs := 0; epochs < 2; epochs++ {
+  for epochs := 0; epochs < 5; epochs++ {
     fmt.Println("Epoch ", epochs)
     start := time.Now()
+    thrNum := 2
 
+    for i := 0; i < dataSet.N -1; i++ {
+      wg.Add(1)
 
-    for i := 0; i < dataSet.N; i++ {
+      go func () {
       //fmt.Println("Sample ", i)
       image := dataSet.Data[i].Image
 
@@ -108,14 +115,19 @@ func train(net *NN.NeuralNetwork) {
       x := dataSet.Data[i].Digit
       targets[x] = 0.99
 
-      net.Train(inputs, targets)
+
+        wg.Done()
+        net.Train(inputs, targets)
+      }()
+
+      if i % thrNum == 0 {
+        wg.Wait()
+      }
     }
 
-
-      elapsed := time.Since(start)
-      fmt.Printf("\nTime taken to train: %s\n", elapsed)
-
-    }
+    elapsed := time.Since(start)
+    fmt.Printf("\nTime taken to train: %s\n", elapsed)
+  }
 }
 
 func getInputsFromImage(image [][]uint8, inputNum int) []float64 {
