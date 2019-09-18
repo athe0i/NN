@@ -46,35 +46,48 @@ func predict(net *NN.NeuralNetwork) {
   start := time.Now()
   dataSet, err := mnist.ReadTestSet("./mnist")
   score := 0
+  thrNum := 4
 
   if err != nil {
     fmt.Println(err)
     return
   }
 
-  for i := 0; i < dataSet.N; i++ {
-    image := dataSet.Data[i].Image
+  for i := 0; i < dataSet.N - 1; i++ {
+    wg.Add(1)
 
-    inputs := getInputsFromImage(image, net.GetInputsNumber())
-    outputs := net.Predict(inputs)
-    best := 0
-    highest := 0.0
+    go func () {
+      image := dataSet.Data[i].Image
 
-    for i := 0; i < net.GetOutputsNumber(); i++ {
-      if outputs.At(i, 0) > highest {
-        best = i
-        highest = outputs.At(i, 0)
+      inputs := getInputsFromImage(image, net.GetInputsNumber())
+      outputs := net.Predict(inputs)
+      best := 0
+      highest := 0.0
+
+      for i := 0; i < net.GetOutputsNumber(); i++ {
+        if outputs.At(i, 0) > highest {
+          best = i
+          highest = outputs.At(i, 0)
+        }
       }
-    }
 
-    label := dataSet.Data[i].Digit
-    if best == label {
-      score++
-    } else {
-      //fmt.Println("Predict", best, " Expected", label, "OUT", outputs)
-      //mnist.PrintImage(image)
+      label := dataSet.Data[i].Digit
+      if best == label {
+        score++
+      } else {
+        //fmt.Println("Predict", best, " Expected", label, "OUT", outputs)
+        //mnist.PrintImage(image)
+      }
+
+      wg.Done()
+    }()
+
+    if i % thrNum == 0 {
+      wg.Wait()
     }
   }
+
+  wg.Wait()
 
   elapsed := time.Since(start)
   fmt.Printf("Time taken to check: %s\n", elapsed)
@@ -97,7 +110,8 @@ func train(net *NN.NeuralNetwork) {
     start := time.Now()
     thrNum := 2
 
-    for i := 0; i < dataSet.N -1; i++ {
+    // for some weird as fuck reason i reaches N, so works not like < but like <=
+    for i := 0; i < dataSet.N - 1; i++ {
       wg.Add(1)
 
       go func () {
@@ -109,21 +123,22 @@ func train(net *NN.NeuralNetwork) {
       //fmt.Println(inputs)
 
       targets := make([]float64, 10)
-      for i := range targets {
-        targets[i] = 0.01
-      }
-      x := dataSet.Data[i].Digit
-      targets[x] = 0.99
+        for i := range targets {
+          targets[i] = 0.01
+        }
 
+        x := dataSet.Data[i].Digit
+        targets[x] = 0.99
+        net.Train(inputs, targets)
 
         wg.Done()
-        net.Train(inputs, targets)
       }()
 
       if i % thrNum == 0 {
         wg.Wait()
       }
     }
+    wg.Wait();
 
     elapsed := time.Since(start)
     fmt.Printf("\nTime taken to train: %s\n", elapsed)
